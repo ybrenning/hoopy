@@ -1,5 +1,6 @@
 import os
 import time
+from io import StringIO
 
 import requests
 import pandas as pd
@@ -65,7 +66,7 @@ def get_player_totals_from_season(season_end):
         soup = BeautifulSoup(response.content, "html.parser")
         table = soup.find("table")
 
-        df = pd.read_html(str(table))[0]
+        df = pd.read_html(StringIO(str(table)))[0]
         df = df[(df["Player"] != "Player") & (df["Tm"] != "TOT")]
 
         columns = df.columns.tolist()
