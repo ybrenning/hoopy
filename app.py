@@ -1,25 +1,26 @@
 from dash import Dash, html, dcc, callback, Output, Input
 import plotly.express as px
 
-from nba_api.stats.endpoints import leagueleaders
+# TODO: Read from csv
+from scrape import all_player_totals_from_season
 
 
-def generate_seasons(start, end):
-    seasons = []
-    for i in range(start, end + 1):
-        seasons.append(f"{i:02}-{int(str(i % 100 + 1)[-2:]):02}")
-    return seasons
-
-
-seasons = generate_seasons(1952, 2023)
-three_pt_seasons = seasons[seasons.index("1979-80"):]
+seasons = [year for year in range(1950, 2023 + 1)]
+three_pt_seasons = seasons[seasons.index(1980):]
 
 app = Dash(__name__)
+
+
+def plot_threes_ratio():
+    ...
+    return px.line()
+
 
 app.layout = html.Div([
     html.H1(children="NBA Stats", style={"textAlign": "center"}),
     dcc.Dropdown(three_pt_seasons, seasons[-1], id="season-dropdown"),
-    dcc.Graph(id="graph-content")
+    dcc.Graph(id="graph-content"),
+    dcc.Graph(figure=plot_threes_ratio(), id="plot-threes")
 ])
 
 
@@ -28,23 +29,10 @@ app.layout = html.Div([
     Input("season-dropdown", "value")
 )
 def update_scatter(season):
-    top_500 = leagueleaders.LeagueLeaders(
-        season=season,
-        season_type_all_star="Regular Season",
-        stat_category_abbreviation="PTS"
-    ).get_data_frames()[0][:500]
+    df = all_player_totals_from_season(season)
+    df["PPG"] = round(df["PTS"] / df["G"], 2)
 
-    top_500["PPG"] = round(top_500["PTS"] / top_500["GP"], 2)
-
-    # These API requests rake forever...
-    # def get_player_pos(player_id):
-    #     return str(commonplayerinfo.CommonPlayerInfo(player_id=player_id).get_data_frames()[0]["POSITION"])
-    #
-    # top_500["POS"] = top_500["PLAYER_ID"].map(get_player_pos)
-    # print(top_500["POS"])
-    print(top_500.columns)
-
-    return px.scatter(top_500, x="PPG", y="FG3M", hover_data=["PLAYER"])
+    return px.scatter(df, x="PPG", y="3P", color="Pos", hover_data=["Player"])
 
 
 if __name__ == "__main__":
