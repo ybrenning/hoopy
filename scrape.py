@@ -11,56 +11,26 @@ from tqdm import tqdm
 
 URL = "https://www.basketball-reference.com/"
 
-stats = ["totals", "advanced", "shooting"]
+stats = ["totals", "advanced"]
 
 path = os.getcwd() + "/data"
 
 
-def first_row_value(series):
-    return series.iloc[0]
-
-
-def first_row_or_nan(series):
-    result = ""
-    for s in series:
-        result += "-" + s
-    return result.strip("-")
-
-
-handle_column_aggs = {
-    "Rk": first_row_value,
-    "Pos": first_row_value,
-    "Age": first_row_value,
-    "Tm": first_row_or_nan,
-    "G": "sum",
-    "GS": "sum",
-    "MP": "sum",
-    "FG": "sum",
-    "FGA": "sum",
-    "FG%": "mean",
-    "3P": "sum",
-    "3PA": "sum",
-    "3P%": "mean",
-    "2P": "sum",
-    "2PA": "sum",
-    "2P%": "mean",
-    "eFG%": "mean",
-    "FT": "sum",
-    "FTA": "sum",
-    "FT%": "mean",
-    "ORB": "sum",
-    "DRB": "sum",
-    "TRB": "sum",
-    "AST": "sum",
-    "STL": "sum",
-    "BLK": "sum",
-    "TOV": "sum",
-    "PF": "sum",
-    "PTS": "sum"
-}
+def handle_agg(series):
+    if series.name == "Tm":
+        result = ""
+        for s in series:
+            if s != "TOT":
+                result += "-" + s
+        return result.strip("-")
+    else:
+        return series.iloc[0]
 
 
 def get_player_totals_from_season(season_end, stat):
+    if stat in ["shooting", "play-by-play", "adj_shooting"]:
+        raise NotImplementedError
+
     response = requests.get(URL + f"leagues/NBA_{season_end}_{stat}.html")
 
     if response.status_code == 200:
@@ -68,7 +38,8 @@ def get_player_totals_from_season(season_end, stat):
         table = soup.find("table")
 
         df = pd.read_html(StringIO(str(table)))[0]
-        df = df[(df["Player"] != "Player") & (df["Tm"] != "TOT")]
+        df = df[df["Player"] != "Player"]
+        df = df.dropna(axis=1, how="all")
 
         columns = df.columns.tolist()
         stat_columns = columns[columns.index("G"):]
@@ -78,7 +49,7 @@ def get_player_totals_from_season(season_end, stat):
 
         df["Player"] = df["Player"].apply(lambda x: x.replace("*", ""))
 
-        agg_df = df.groupby("Player").agg(handle_column_aggs).reset_index()
+        agg_df = df.groupby("Player").agg(handle_agg).reset_index()
 
         return agg_df
     else:
