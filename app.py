@@ -35,6 +35,14 @@ def plot_fg_percentages():
 
     fig.add_vline(x=1980, line_width=3, line_dash="dash", line_color="green")
 
+    fig.add_annotation(
+        x=1980,
+        y=0.5,
+        text="Introduction of 3PT line",
+        showarrow=False,
+        yshift=10
+    )
+
     fig.update_layout(
         autosize=False,
         width=1000,
