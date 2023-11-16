@@ -1,10 +1,8 @@
 import os
 
 import pandas as pd
-
-from dash import Dash, html, dcc, callback, Output, Input
 import plotly.express as px
-
+from dash import Dash, Input, Output, callback, dcc, html
 
 data_path = os.getcwd() + "/data"
 seasons = [year for year in range(1950, 2023 + 1)]

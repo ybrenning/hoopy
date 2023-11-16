@@ -4,8 +4,8 @@ import os
 import time
 from io import StringIO
 
-import requests
 import pandas as pd
+import requests
 from bs4 import BeautifulSoup
 from tqdm import tqdm
 
