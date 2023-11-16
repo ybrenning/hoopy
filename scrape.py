@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import os
 import time
 from io import StringIO
@@ -5,8 +7,11 @@ from io import StringIO
 import requests
 import pandas as pd
 from bs4 import BeautifulSoup
+from tqdm import tqdm
 
-url = "https://www.basketball-reference.com/"
+URL = "https://www.basketball-reference.com/"
+
+stats = ["totals", "advanced", "shooting"]
 
 path = os.getcwd() + "/data"
 
@@ -20,11 +25,6 @@ def first_row_or_nan(series):
     for s in series:
         result += "-" + s
     return result.strip("-")
-
-    if len(series) >= 2:
-        return pd.NA
-    else:
-        return series.iloc[0]
 
 
 handle_column_aggs = {
@@ -60,8 +60,8 @@ handle_column_aggs = {
 }
 
 
-def get_player_totals_from_season(season_end):
-    response = requests.get(url + f"leagues/NBA_{season_end}_totals.html")
+def get_player_totals_from_season(season_end, stat):
+    response = requests.get(URL + f"leagues/NBA_{season_end}_{stat}.html")
 
     if response.status_code == 200:
         soup = BeautifulSoup(response.content, "html.parser")
@@ -85,20 +85,22 @@ def get_player_totals_from_season(season_end):
         return None
 
 
-def save_player_totals(path):
-    # Get data in batches of 29, since the website
+def save_player_totals(save_path, *stats):
+    # Get data in batches of 30, since the website
     # does not allow for more requests per minute ¯\_(ツ)_/¯
-    for batch in range(1950, 2023+1, 29):
-        for season in range(batch, batch+29):
-            if season > 2023:
-                break
 
-            print(f"Fetching season {season}")
-            df = get_player_totals_from_season(season)
-            df.to_csv(f"{path}/player_totals_{season}.csv")
+    for stat in stats:
+        print(f"Loading {stat}")
+        for batch in range(1950, 2023+1, 30):
+            pbar = tqdm(range(batch, min(batch+30, 2024)), ascii=True)
+            for season in pbar:
+                pbar.set_description(f"Processing {season}")
+                df = get_player_totals_from_season(season, stat)
+                df.to_csv(f"{save_path}/player_{stat}_{season}.csv")
 
-        time.sleep(60)
+            for i in tqdm(range(0, 60), desc="Request cooldown"):
+                time.sleep(1)
 
 
 if __name__ == "__main__":
-    save_player_totals(path)
+    save_player_totals(path, *stats)
