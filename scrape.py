@@ -20,6 +20,7 @@ def first_row_or_nan(series):
     for s in series:
         result += "-" + s
     return result.strip("-")
+
     if len(series) >= 2:
         return pd.NA
     else:
