@@ -11,7 +11,16 @@ from tqdm import tqdm
 
 URL = "https://www.basketball-reference.com/"
 
-stats = ["totals", "advanced"]
+available_stats = [
+    "totals",
+    "per_game",
+    "per_minute",
+    "per_poss",
+    "advanced",
+    "play-by-play",
+    "shooting",
+    "adj_shooting"
+]
 
 path = os.getcwd() + "/data"
 
@@ -28,7 +37,11 @@ def handle_agg(series):
 
 
 def get_player_totals_from_season(season_end, stat):
-    if stat in ["shooting", "play-by-play", "adj_shooting"]:
+    if stat not in available_stats:
+        raise ValueError
+
+    # TODO: Implement these
+    if stat in ["shooting", "adj_shooting"]:
         raise NotImplementedError
 
     response = requests.get(URL + f"leagues/NBA_{season_end}_{stat}.html")
@@ -38,18 +51,38 @@ def get_player_totals_from_season(season_end, stat):
         table = soup.find("table")
 
         df = pd.read_html(StringIO(str(table)))[0]
-        df = df[df["Player"] != "Player"]
+
+        # TODO: Refactor all these if statements
+        if stat == "play-by-play":
+            idx = df.columns
+            colnames = ["General" for _ in range(5)] + \
+                [col[0] for col in idx[5:]]
+
+            new_idx = list(zip(colnames, [col[1] for col in idx]))
+            df.columns = pd.MultiIndex.from_tuples(new_idx)
+
         df = df.dropna(axis=1, how="all")
 
         columns = df.columns.tolist()
-        stat_columns = columns[columns.index("G"):]
+
+        if stat == "play-by-play":
+            stat_columns = columns[[col[1] for col in columns].index("G"):]
+        else:
+            stat_columns = columns[columns.index("G"):]
 
         for sc in stat_columns:
             df[sc] = pd.to_numeric(df[sc], errors="coerce")
 
-        df["Player"] = df["Player"].apply(lambda x: x.replace("*", ""))
-
-        agg_df = df.groupby("Player").agg(handle_agg).reset_index()
+        if stat == "play-by-play":
+            df[("General", "Player")] = df[("General", "Player")].apply(
+                lambda x: x.replace("*", "")
+            )
+            agg_df = df.groupby(
+                ("General", "Player")
+            ).agg(handle_agg).reset_index()
+        else:
+            df["Player"] = df["Player"].apply(lambda x: x.replace("*", ""))
+            agg_df = df.groupby("Player").agg(handle_agg).reset_index()
 
         return agg_df
     else:
@@ -74,4 +107,6 @@ def save_player_totals(save_path, *stats):
 
 
 if __name__ == "__main__":
-    save_player_totals(path, *stats)
+    df = get_player_totals_from_season(2023, stat="play-by-play")
+    print(df)
+    # save_player_totals(path, ["totals", "advanced"])
