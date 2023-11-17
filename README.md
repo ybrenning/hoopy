@@ -2,7 +2,7 @@
 
 > Note: This project is still a work in progress
 
-Scraping NBA data from [Basketball Reference](https://www.basketball-reference.com) for personal projects and using it in an example data visualization application
+Scraping NBA data from [Basketball Reference](https://www.basketball-reference.com) for use in personal projects and using it in an example data visualization application
 
 ## Setup
 
