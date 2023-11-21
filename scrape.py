@@ -51,43 +51,25 @@ def handle_agg(series):
         return series.iloc[0]
 
 
-def make_request(season_end, stat):
-    # TODO: Implement these
-    if stat in ["shooting", "adj_shooting"]:
-        raise NotImplementedError
-
-    if stat in single_index:
-        scrape_table = scrape_single_index_table
-    elif stat in multi_index:
-        scrape_table = scrape_multi_index_table
-    else:
-        raise ValueError
-
-    response = requests.get(URL + f"leagues/NBA_{season_end}_{stat}.html")
-
-    if response.status_code == 200:
-        return scrape_table(response)
-    else:
-        raise HTTPError(response.status_code)
-
-
 def scrape_multi_index_table(response):
     soup = BeautifulSoup(response.content, "html.parser")
     table = soup.find("table")
 
     df = pd.read_html(StringIO(str(table)))[0]
+    df = df.dropna(axis=1, how="all")
 
-    # TODO: This only handles column names for play-by-play
+    # TODO: This only handles column names for shooting and play-by-play
     columns = df.columns.tolist()
-    first_col_names = ["General" for _ in range(5)] + \
-        [col[0] for col in columns[5:]]
+    rename_amount = len([
+        col for col in columns if col[0].startswith("Unnamed")
+    ])
+    first_col_names = ["General" for _ in range(rename_amount)] + \
+        [col[0] for col in columns[rename_amount:]]
 
     new_columns = list(zip(first_col_names, [col[1] for col in columns]))
     df.columns = pd.MultiIndex.from_tuples(new_columns)
 
-    df = df.dropna(axis=1, how="all")
-
-    stat_columns = columns[[col[1] for col in columns].index("G"):]
+    stat_columns = new_columns[[col[1] for col in columns].index("G"):]
     for sc in stat_columns:
         df[sc] = pd.to_numeric(df[sc], errors="coerce")
 
@@ -121,6 +103,26 @@ def scrape_single_index_table(response):
     agg_df = df.groupby("Player").agg(handle_agg).reset_index()
 
     return agg_df
+
+
+def make_request(season_end, stat):
+    # TODO: Implement these
+    if stat in ["adj_shooting"]:
+        raise NotImplementedError
+
+    if stat in single_index:
+        scrape_table = scrape_single_index_table
+    elif stat in multi_index:
+        scrape_table = scrape_multi_index_table
+    else:
+        raise ValueError
+
+    response = requests.get(URL + f"leagues/NBA_{season_end}_{stat}.html")
+
+    if response.status_code == 200:
+        return scrape_table(response)
+    else:
+        raise HTTPError(response.status_code)
 
 
 def save_player_totals(save_path, *stats):
