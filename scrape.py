@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import re
 import time
 from io import StringIO
 from urllib.error import HTTPError
@@ -52,7 +53,8 @@ def handle_agg(series):
 
 
 def scrape_multi_index_table(response):
-    soup = BeautifulSoup(response.content, "html.parser")
+    html = response.text
+    soup = BeautifulSoup(re.sub("<!--|-->", "", html), "html.parser")
     table = soup.find("table")
 
     df = pd.read_html(StringIO(str(table)))[0]
@@ -75,6 +77,12 @@ def scrape_multi_index_table(response):
 
     df.columns = [" ".join(col_name).rstrip('_') for col_name in df.columns]
     df = df.drop("General Rk", axis=1)
+
+    player_name_mask = df["General Player"].apply(
+        lambda x: not isinstance(x, str) or x == "Player"
+    )
+    rows_to_drop = df[player_name_mask].index
+    df.drop(rows_to_drop, inplace=True)
 
     df["General Player"] = df["General Player"].apply(
         lambda x: x.replace("*", "")
@@ -106,10 +114,6 @@ def scrape_single_index_table(response):
 
 
 def make_request(season_end, stat):
-    # TODO: Implement adj_shooting (table messed up due to JS)
-    if stat in ["adj_shooting"]:
-        raise NotImplementedError
-
     if stat in single_index:
         scrape_table = scrape_single_index_table
     elif stat in multi_index:
@@ -143,5 +147,7 @@ def save_player_totals(save_path, *stats):
 
 
 if __name__ == "__main__":
-    df = make_request(season_end=2023, stat="shooting")
+    # TODO: Test full scraping w/ adj_shooting
+    df = make_request(season_end=2023, stat="adj_shooting")
+    print(df)
     # save_player_totals(path, ["totals", "advanced"])
