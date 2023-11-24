@@ -12,33 +12,44 @@ app = Dash(__name__)
 
 
 def plot_fg_percentages():
-    dfs = []
+    totals_dfs = []
+    adv_dfs = []
     for season in seasons:
-        df = pd.read_csv(data_path + f"/player_totals_{season}.csv")
-        df["season"] = season
-        dfs.append(df)
+        totals_df = pd.read_csv(data_path + f"/player_totals_{season}.csv")
+        adv_df = pd.read_csv(data_path + f"/player_advanced_{season}.csv")
+        totals_df["season"] = season
+        totals_dfs.append(totals_df)
+        adv_df["season"] = season
+        adv_dfs.append(adv_df)
 
-    combined = pd.concat(dfs, ignore_index=True)
-    combined = combined[["season",  "eFG%", "FG%",]]
+    totals_combined = pd.concat(totals_dfs, ignore_index=True)
+    totals_combined = totals_combined[["season",  "eFG%", "FG%"]]
 
-    new_df = combined.groupby("season").mean().reset_index()
+    adv_combined = pd.concat(adv_dfs, ignore_index=True)
+    adv_combined = adv_combined[["season", "TS%"]]
+
+    totals_new_df = totals_combined.groupby("season").mean().reset_index()
+    adv_new_df = adv_combined.groupby("season").mean().reset_index()
+
+    new_df = pd.merge(totals_new_df, adv_new_df)
 
     fig = px.line(
         new_df,
         x="season",
         y=new_df.columns[1:],
         markers=".",
-        template="seaborn"
+        template="seaborn",
+        labels={"season": "Season", "value": "Shooting Percentage"}
     )
 
     fig.add_vline(x=1980, line_width=3, line_dash="dash", line_color="green")
 
     fig.add_annotation(
         x=1980,
-        y=0.5,
+        y=0.55,
         text="Introduction of 3PT line",
         showarrow=False,
-        yshift=10
+        yshift=10,
     )
 
     fig.update_layout(
@@ -55,6 +66,20 @@ def plot_fg_percentages():
     )
 
     return fig
+
+
+# TODO: Implement this
+def mins_played_by_age():
+    raise NotImplementedError
+    dfs = []
+    for season in seasons:
+        dfs.append(
+            pd.read_csv(
+                data_path + f"/player_totals_{season}.csv"
+            )[["Age", "MP"]]
+        )
+
+    print(dfs[0])
 
 
 app.layout = html.Div([
@@ -113,4 +138,5 @@ def update_scatter(season_end):
 
 
 if __name__ == "__main__":
+    mins_played_by_age()
     app.run(debug=True)

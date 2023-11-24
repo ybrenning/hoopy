@@ -106,7 +106,7 @@ def scrape_single_index_table(response):
 
 
 def make_request(season_end, stat):
-    # TODO: Implement these
+    # TODO: Implement adj_shooting (table messed up due to JS)
     if stat in ["adj_shooting"]:
         raise NotImplementedError
 
@@ -144,5 +144,4 @@ def save_player_totals(save_path, *stats):
 
 if __name__ == "__main__":
     df = make_request(season_end=2023, stat="shooting")
-    print(df)
     # save_player_totals(path, ["totals", "advanced"])
