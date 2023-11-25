@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import datetime
 import os
 import re
 import time
@@ -53,6 +54,7 @@ def handle_agg(series):
 
 
 def scrape_multi_index_table(response):
+    # TODO: Handle older adj_shooting tables
     html = response.text
     soup = BeautifulSoup(re.sub("<!--|-->", "", html), "html.parser")
     table = soup.find("table")
@@ -60,7 +62,6 @@ def scrape_multi_index_table(response):
     df = pd.read_html(StringIO(str(table)))[0]
     df = df.dropna(axis=1, how="all")
 
-    # TODO: This only handles column names for shooting and play-by-play
     columns = df.columns.tolist()
     rename_amount = len([
         col for col in columns if col[0].startswith("Unnamed")
@@ -129,25 +130,40 @@ def make_request(season_end, stat):
         raise HTTPError(response.status_code)
 
 
-def save_player_totals(save_path, *stats):
+def save_player_totals(save_path, *stats, start_season=1950, end_season=None):
+    end_season = end_season or int(datetime.date.today().strftime("%Y"))
+    if start_season > end_season:
+        raise ValueError
+
     # Get data in batches of 30, since the website
     # does not allow for more requests per minute ¯\_(ツ)_/¯
+    batch_size = 30
 
     for stat in stats:
         print(f"Loading {stat}")
-        for batch in range(1950, 2023+1, 30):
-            pbar = tqdm(range(batch, min(batch+30, 2024)), ascii=True)
+
+        if stat == "shooting":
+            cur_start_season = start_season
+            print(
+                "Disclaimer: stats only available starting from",
+                cur_start_season
+            )
+        else:
+            cur_start_season = start_season
+
+        for batch_start in range(cur_start_season, end_season+1, batch_size):
+            pbar = tqdm(
+                range(batch_start, min(batch_start+batch_size, end_season+1)),
+                ascii=True
+            )
             for season in pbar:
                 pbar.set_description(f"Processing {season}")
                 df = make_request(season, stat)
                 df.to_csv(f"{save_path}/player_{stat}_{season}.csv")
 
-            for i in tqdm(range(0, 60), desc="Request cooldown"):
+            for i in tqdm(range(0, 60), desc="Request cooldown (60s)"):
                 time.sleep(1)
 
 
 if __name__ == "__main__":
-    # TODO: Test full scraping w/ adj_shooting
-    df = make_request(season_end=2023, stat="adj_shooting")
-    print(df)
-    # save_player_totals(path, ["totals", "advanced"])
+    save_player_totals(path, "shooting", "adj_shooting")
