@@ -42,10 +42,11 @@ multi_index = [
 ]
 
 path = os.getcwd() + "/data"
+current_year = int(datetime.date.today().strftime("%Y"))
 
 
 def handle_agg(series):
-    if series.name == "Tm" or series.name == "General Tm":
+    if series.name == "Tm":
         result = ""
         for s in series:
             if s != "TOT":
@@ -55,8 +56,7 @@ def handle_agg(series):
         return series.iloc[0]
 
 
-def format_multi_columns(df):
-    columns = df.columns.tolist()
+def format_multi_columns(columns):
     unnamed_mask = [
         True if col[0].startswith("Unnamed") else False for col in columns
     ]
@@ -86,7 +86,7 @@ def scrape_multi_index_table(response):
     df = pd.read_html(StringIO(str(table)))[0]
     df = df.dropna(axis=1, how="all")
 
-    df.columns = format_multi_columns(df)
+    df.columns = format_multi_columns(df.columns.tolist())
 
     stat_columns = df.columns[df.columns.tolist().index("G"):]
     for sc in stat_columns:
@@ -122,6 +122,12 @@ def scrape_single_index_table(response):
     for sc in stat_columns:
         df[sc] = pd.to_numeric(df[sc], errors="coerce")
 
+    player_name_mask = df["Player"].apply(
+        lambda x: not isinstance(x, str) or x == "Player"
+    )
+    rows_to_drop = df[player_name_mask].index
+    df.drop(rows_to_drop, inplace=True)
+
     df["Player"] = df["Player"].apply(lambda x: x.replace("*", ""))
     agg_df = df.groupby("Player").agg(handle_agg).reset_index()
 
@@ -144,9 +150,9 @@ def make_request(season_end, stat):
         raise HTTPError(response.status_code)
 
 
-def save_player_totals(save_path, *stats, start_season=1950, end_season=None):
+def save_stat_tables(save_path, *stats, start_season=1950, end_season=None):
     start_season = start_season or 1950
-    end_season = end_season or int(datetime.date.today().strftime("%Y"))
+    end_season = end_season or current_year
     if start_season > end_season:
         raise ValueError
 
@@ -190,11 +196,20 @@ def parse_args():
     stat_options = ", ".join([stat for stat in available_stats])
 
     parser = argparse.ArgumentParser(description='Scrape NBA data')
-    parser.add_argument('stats', metavar='stats', type=str, nargs='+',
-                        help=f"stat categories to scrape [{stat_options}]")
     parser.add_argument(
-        '--seasons', required=False, metavar='seasons', type=str, nargs=1,
-        help='(optional) range of seasons to scrape from, e.g. 1996-1998',
+        "stats",
+        metavar="stats",
+        type=str,
+        nargs="+",
+        help=f"stat categories to scrape [{stat_options}]"
+    )
+    parser.add_argument(
+        "--seasons",
+        required=False,
+        metavar="seasons",
+        type=str,
+        nargs=1,
+        help="(optional) range of seasons to scrape from, e.g. 1996-1998",
     )
 
     args = parser.parse_args()
@@ -215,7 +230,6 @@ def parse_args():
             start_season = int(args.seasons[0].split("-")[0])
             end_season = int(args.seasons[0].split("-")[1])
 
-        current_year = int(datetime.date.today().strftime("%Y"))
         valid_seasons = range(1950, current_year)
         if (
                 start_season > end_season or
@@ -231,7 +245,7 @@ def parse_args():
 
 if __name__ == "__main__":
     stats, start_season, end_season = parse_args()
-    save_player_totals(
+    save_stat_tables(
         path,
         *stats,
         start_season=start_season,
