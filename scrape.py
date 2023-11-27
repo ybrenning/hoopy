@@ -54,6 +54,29 @@ def handle_agg(series):
         return series.iloc[0]
 
 
+def format_multi_columns(df):
+    columns = df.columns.tolist()
+    unnamed_mask = [
+        True if col[0].startswith("Unnamed") else False for col in columns
+    ]
+    named_mask = [not m for m in unnamed_mask]
+
+    first_col_names = ["" for m in unnamed_mask if m] + \
+        [col[0] for col in list(compress(columns, named_mask))]
+
+    second_col_names = [
+        col[1] for col in list(compress(columns, unnamed_mask))
+    ] + [col[1] for col in list(compress(columns, named_mask))]
+
+    new_columns = [
+        " ".join(col).rstrip('_').lstrip(" ") for col in zip(
+            first_col_names, second_col_names
+        )
+    ]
+
+    return new_columns
+
+
 def scrape_multi_index_table(response):
     html = response.text
     soup = BeautifulSoup(re.sub("<!--|-->", "", html), "html.parser")
@@ -62,27 +85,12 @@ def scrape_multi_index_table(response):
     df = pd.read_html(StringIO(str(table)))[0]
     df = df.dropna(axis=1, how="all")
 
-    columns = df.columns.tolist()
-    mask = [True if col[0].startswith("Unnamed") else False for col in columns]
-    mask_complement = [not m for m in mask]
+    df.columns = format_multi_columns(df)
 
-    first_col_names = ["" for m in mask if m] + \
-        [col[0] for col in list(compress(columns, mask_complement))]
-
-    second_col_names = [col[1] for col in list(compress(columns, mask))] \
-        + [col[1] for col in list(compress(columns, mask_complement))]
-
-    new_columns = list(zip(first_col_names, second_col_names))
-
-    df.columns = pd.MultiIndex.from_tuples(new_columns)
-
-    stat_columns = new_columns[[col[1] for col in columns].index("G"):]
+    stat_columns = df.columns[df.columns.tolist().index("G"):]
     for sc in stat_columns:
         df[sc] = pd.to_numeric(df[sc], errors="coerce")
 
-    df.columns = [
-        " ".join(col_name).rstrip('_').lstrip(" ") for col_name in df.columns
-    ]
     df = df.drop("Rk", axis=1)
 
     player_name_mask = df["Player"].apply(
@@ -108,7 +116,6 @@ def scrape_single_index_table(response):
     df = df.drop("Rk", axis=1)
 
     columns = df.columns.tolist()
-
     stat_columns = columns[columns.index("G"):]
 
     for sc in stat_columns:
