@@ -4,6 +4,7 @@ import datetime
 import os
 import re
 import time
+from itertools import compress
 from io import StringIO
 from urllib.error import HTTPError
 
@@ -54,7 +55,6 @@ def handle_agg(series):
 
 
 def scrape_multi_index_table(response):
-    # TODO: Handle older adj_shooting tables
     html = response.text
     soup = BeautifulSoup(re.sub("<!--|-->", "", html), "html.parser")
     table = soup.find("table")
@@ -63,32 +63,38 @@ def scrape_multi_index_table(response):
     df = df.dropna(axis=1, how="all")
 
     columns = df.columns.tolist()
-    rename_amount = len([
-        col for col in columns if col[0].startswith("Unnamed")
-    ])
-    first_col_names = ["General" for _ in range(rename_amount)] + \
-        [col[0] for col in columns[rename_amount:]]
+    mask = [True if col[0].startswith("Unnamed") else False for col in columns]
+    mask_complement = [not m for m in mask]
 
-    new_columns = list(zip(first_col_names, [col[1] for col in columns]))
+    first_col_names = ["" for m in mask if m] + \
+        [col[0] for col in list(compress(columns, mask_complement))]
+
+    second_col_names = [col[1] for col in list(compress(columns, mask))] \
+        + [col[1] for col in list(compress(columns, mask_complement))]
+
+    new_columns = list(zip(first_col_names, second_col_names))
+
     df.columns = pd.MultiIndex.from_tuples(new_columns)
 
     stat_columns = new_columns[[col[1] for col in columns].index("G"):]
     for sc in stat_columns:
         df[sc] = pd.to_numeric(df[sc], errors="coerce")
 
-    df.columns = [" ".join(col_name).rstrip('_') for col_name in df.columns]
-    df = df.drop("General Rk", axis=1)
+    df.columns = [
+        " ".join(col_name).rstrip('_').lstrip(" ") for col_name in df.columns
+    ]
+    df = df.drop("Rk", axis=1)
 
-    player_name_mask = df["General Player"].apply(
+    player_name_mask = df["Player"].apply(
         lambda x: not isinstance(x, str) or x == "Player"
     )
     rows_to_drop = df[player_name_mask].index
     df.drop(rows_to_drop, inplace=True)
 
-    df["General Player"] = df["General Player"].apply(
+    df["Player"] = df["Player"].apply(
         lambda x: x.replace("*", "")
     )
-    agg_df = df.groupby("General Player").agg(handle_agg).reset_index()
+    agg_df = df.groupby("Player").agg(handle_agg).reset_index()
 
     return agg_df
 
@@ -166,4 +172,6 @@ def save_player_totals(save_path, *stats, start_season=1950, end_season=None):
 
 
 if __name__ == "__main__":
-    save_player_totals(path, "shooting", "adj_shooting")
+    df = make_request(season_end=1950, stat="adj_shooting")
+    print(df)
+    # save_player_totals(path, "shooting", "adj_shooting")
