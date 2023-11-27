@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 
+import argparse
 import datetime
 import os
 import re
 import time
-from itertools import compress
 from io import StringIO
+from itertools import compress
 from urllib.error import HTTPError
 
 import pandas as pd
@@ -144,6 +145,7 @@ def make_request(season_end, stat):
 
 
 def save_player_totals(save_path, *stats, start_season=1950, end_season=None):
+    start_season = start_season or 1950
     end_season = end_season or int(datetime.date.today().strftime("%Y"))
     if start_season > end_season:
         raise ValueError
@@ -155,8 +157,14 @@ def save_player_totals(save_path, *stats, start_season=1950, end_season=None):
     for stat in stats:
         print(f"Loading {stat}")
 
-        if stat == "shooting":
-            cur_start_season = start_season
+        if stat in ["shooting", "play-by-play"]:
+            cur_start_season = 1997
+            print(
+                "Disclaimer: stats only available starting from",
+                cur_start_season
+            )
+        elif stat == "per_poss":
+            cur_start_season = 1974
             print(
                 "Disclaimer: stats only available starting from",
                 cur_start_season
@@ -178,7 +186,54 @@ def save_player_totals(save_path, *stats, start_season=1950, end_season=None):
                 time.sleep(1)
 
 
+def parse_args():
+    stat_options = ", ".join([stat for stat in available_stats])
+
+    parser = argparse.ArgumentParser(description='Scrape NBA data')
+    parser.add_argument('stats', metavar='stats', type=str, nargs='+',
+                        help=f"stat categories to scrape [{stat_options}]")
+    parser.add_argument(
+        '--seasons', required=False, metavar='seasons', type=str, nargs=1,
+        help='(optional) range of seasons to scrape from, e.g. 1996-1998',
+    )
+
+    args = parser.parse_args()
+    for stat in args.stats:
+        if stat not in available_stats:
+            raise ValueError(
+                f"'{stat}' is not a valid stat. Read help menu for more info"
+            )
+
+    if args.seasons:
+        if len(args.seasons) > 1:
+            raise ValueError(
+                f"{len(args.seasons)} date args provided, 1 expected"
+            )
+
+        date_pattern = re.compile(r"^(19|20)\d{2}-(19|20)\d{2}$")
+        if date_pattern.match(args.seasons[0]):
+            start_season = int(args.seasons[0].split("-")[0])
+            end_season = int(args.seasons[0].split("-")[1])
+
+        current_year = int(datetime.date.today().strftime("%Y"))
+        valid_seasons = range(1950, current_year)
+        if (
+                start_season > end_season or
+                start_season not in valid_seasons or
+                end_season not in valid_seasons
+           ):
+            raise ValueError("Invalid season range provided")
+    else:
+        start_season = end_season = None
+
+    return args.stats, start_season, end_season
+
+
 if __name__ == "__main__":
-    df = make_request(season_end=1950, stat="adj_shooting")
-    print(df)
-    # save_player_totals(path, "shooting", "adj_shooting")
+    stats, start_season, end_season = parse_args()
+    save_player_totals(
+        path,
+        *stats,
+        start_season=start_season,
+        end_season=end_season
+    )
