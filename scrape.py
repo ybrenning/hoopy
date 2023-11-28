@@ -16,7 +16,7 @@ from tqdm import tqdm
 
 URL = "https://www.basketball-reference.com/"
 
-available_stats = [
+available_player_stats = [
     "totals",
     "per_game",
     "per_minute",
@@ -25,6 +25,10 @@ available_stats = [
     "play-by-play",
     "shooting",
     "adj_shooting"
+]
+
+available_team_stats = [
+    "standings"
 ]
 
 single_index = [
@@ -56,7 +60,7 @@ def handle_agg(series):
         return series.iloc[0]
 
 
-def format_multi_columns(columns):
+def format_multi_index_columns(columns):
     unnamed_mask = [
         True if col[0].startswith("Unnamed") else False for col in columns
     ]
@@ -78,7 +82,7 @@ def format_multi_columns(columns):
     return new_columns
 
 
-def scrape_multi_index_table(response):
+def scrape_players_multi_index(response):
     html = response.text
     soup = BeautifulSoup(re.sub("<!--|-->", "", html), "html.parser")
     table = soup.find("table")
@@ -86,7 +90,7 @@ def scrape_multi_index_table(response):
     df = pd.read_html(StringIO(str(table)))[0]
     df = df.dropna(axis=1, how="all")
 
-    df.columns = format_multi_columns(df.columns.tolist())
+    df.columns = format_multi_index_columns(df.columns.tolist())
 
     stat_columns = df.columns[df.columns.tolist().index("G"):]
     for sc in stat_columns:
@@ -108,7 +112,7 @@ def scrape_multi_index_table(response):
     return agg_df
 
 
-def scrape_single_index_table(response):
+def scrape_players_single_index(response):
     soup = BeautifulSoup(response.content, "html.parser")
     table = soup.find("table")
 
@@ -134,11 +138,52 @@ def scrape_single_index_table(response):
     return agg_df
 
 
+def scrape_standings(response):
+    html = response.text
+    soup = BeautifulSoup(re.sub("<!--|-->", "", html), "html.parser")
+    table = soup.find_all("table")
+
+    df_east = pd.read_html(StringIO(str(table[0])))[0]
+    df_west = pd.read_html(StringIO(str(table[1])))[0]
+
+    df_east.columns = df_east.columns.str.replace(
+        "Eastern Conference", "Team Name"
+    )
+    df_west.columns = df_west.columns.str.replace(
+        "Western Conference", "Team Name"
+    )
+
+    df_east = df_east.dropna(axis=1, how="all")
+    df_west = df_west.dropna(axis=1, how="all")
+
+    df_east = df_east[~df_east["Team Name"].str.endswith("Division")]
+    df_west = df_west[~df_west["Team Name"].str.endswith("Division")]
+
+    for sc in df_east.columns.tolist()[1:]:
+        df_east[sc] = pd.to_numeric(df_east[sc], errors="coerce")
+        df_west[sc] = pd.to_numeric(df_west[sc], errors="coerce")
+
+    df_east["Team Name"] = df_east["Team Name"].apply(
+        lambda x: x.replace("*", "")
+    )
+    df_west["Team Name"] = df_west["Team Name"].apply(
+        lambda x: x.replace("*", "")
+    )
+
+    return df_east.reset_index(drop=True), df_west.reset_index(drop=True)
+
+
 def make_request(season_end, stat):
+    # TODO: Implement older standing tables
+    if season_end < 1971 and stat == "standings":
+        raise NotImplementedError
+
     if stat in single_index:
-        scrape_table = scrape_single_index_table
+        scrape_table = scrape_players_single_index
     elif stat in multi_index:
-        scrape_table = scrape_multi_index_table
+        scrape_table = scrape_players_multi_index
+    elif stat in available_team_stats:
+        scrape_table = scrape_standings
     else:
         raise ValueError
 
@@ -186,16 +231,25 @@ def save_stat_tables(save_path, *stats, start_season=1950, end_season=None):
             for season in pbar:
                 pbar.set_description(f"Processing {season}")
                 df = make_request(season, stat)
-                df.to_csv(f"{save_path}/player_{stat}_{season}.csv")
+
+                if stat == "standings":
+                    df_east, df_west = df
+                    df_east.to_csv(f"{save_path}/{stat}_east_{season}.csv")
+                    df_west.to_csv(f"{save_path}/{stat}_west_{season}.csv")
+                else:
+                    df.to_csv(f"{save_path}/player_{stat}_{season}.csv")
+
+            if batch_start == end_season:
+                break
 
             for i in tqdm(range(0, 60), desc="Request cooldown (60s)"):
                 time.sleep(1)
 
 
 def parse_args():
-    stat_options = ", ".join([stat for stat in available_stats])
+    stat_options = ", ".join([stat for stat in available_player_stats])
 
-    parser = argparse.ArgumentParser(description='Scrape NBA data')
+    parser = argparse.ArgumentParser(description="Scrape NBA data")
     parser.add_argument(
         "stats",
         metavar="stats",
@@ -214,7 +268,7 @@ def parse_args():
 
     args = parser.parse_args()
     for stat in args.stats:
-        if stat not in available_stats:
+        if stat not in available_player_stats + available_team_stats:
             raise ValueError(
                 f"'{stat}' is not a valid stat. Read help menu for more info"
             )
@@ -230,7 +284,7 @@ def parse_args():
             start_season = int(args.seasons[0].split("-")[0])
             end_season = int(args.seasons[0].split("-")[1])
 
-        valid_seasons = range(1950, current_year)
+        valid_seasons = range(1950, current_year + 1)
         if (
                 start_season > end_season or
                 start_season not in valid_seasons or
