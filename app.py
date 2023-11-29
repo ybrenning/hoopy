@@ -168,5 +168,4 @@ def update_scatter(season_end):
 
 
 if __name__ == "__main__":
-    mins_played_by_age()
     app.run(debug=True)
