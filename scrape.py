@@ -146,38 +146,63 @@ def scrape_standings(response):
     df_east = pd.read_html(StringIO(str(table[0])))[0]
     df_west = pd.read_html(StringIO(str(table[1])))[0]
 
+    # Handles older standings tables
+    if isinstance(df_west.columns, pd.MultiIndex):
+        index_east = df_east[df_east["Team"] == "Eastern Division"].index[0]
+        index_west = df_east[df_east["Team"] == "Western Division"].index[0]
+
+        # Handle central divison separately, this is only the case in 1950
+        index_central = df_east[df_east["Team"] == "Central Division"].index[0]
+        if index_central is not None:
+            df_central = df_east.iloc[index_central+1: index_east, :]
+        else:
+            df_central = None
+
+        df_west = df_east.iloc[index_west+1:, :]
+        df_east = df_east.iloc[index_east+1: index_west, :]
+
     df_east.columns = df_east.columns.str.replace(
-        "Eastern Conference", "Team Name"
+        "Eastern Conference", "Team"
     )
     df_west.columns = df_west.columns.str.replace(
-        "Western Conference", "Team Name"
+        "Western Conference", "Team"
     )
 
     df_east = df_east.dropna(axis=1, how="all")
     df_west = df_west.dropna(axis=1, how="all")
 
-    df_east = df_east[~df_east["Team Name"].str.endswith("Division")]
-    df_west = df_west[~df_west["Team Name"].str.endswith("Division")]
-
     for sc in df_east.columns.tolist()[1:]:
         df_east[sc] = pd.to_numeric(df_east[sc], errors="coerce")
         df_west[sc] = pd.to_numeric(df_west[sc], errors="coerce")
 
-    df_east["Team Name"] = df_east["Team Name"].apply(
+    df_east["Team"] = df_east["Team"].apply(
         lambda x: x.replace("*", "")
     )
-    df_west["Team Name"] = df_west["Team Name"].apply(
+    df_west["Team"] = df_west["Team"].apply(
         lambda x: x.replace("*", "")
     )
 
-    return df_east.reset_index(drop=True), df_west.reset_index(drop=True)
+    # Handle central division
+    if df_central is not None:
+        df_central = df_central.dropna(axis=1, how="all")
+
+        for sc in df_central.columns.tolist()[1:]:
+            df_central[sc] = pd.to_numeric(df_central[sc], errors="coerce")
+
+        df_central["Team"] = df_central["Team"].apply(
+            lambda x: x.replace("*", "")
+        )
+
+        df_central = df_central.reset_index(drop=True)
+
+    return (
+        df_east.reset_index(drop=True),
+        df_west.reset_index(drop=True),
+        df_central
+    )
 
 
 def make_request(season_end, stat):
-    # TODO: Implement older standing tables
-    if season_end < 1971 and stat == "standings":
-        raise NotImplementedError
-
     if stat in single_index:
         scrape_table = scrape_players_single_index
     elif stat in multi_index:
@@ -233,12 +258,18 @@ def save_stat_tables(save_path, *stats, start_season=1950, end_season=None):
                 df = make_request(season, stat)
 
                 if stat == "standings":
-                    df_east, df_west = df
+                    df_east, df_west, df_central = df
                     df_east.to_csv(f"{save_path}/{stat}_east_{season}.csv")
                     df_west.to_csv(f"{save_path}/{stat}_west_{season}.csv")
+
+                    if df_central is not None:
+                        df_central.to_csv(
+                            f"{save_path}/{stat}_central_{season}.csv"
+                        )
                 else:
                     df.to_csv(f"{save_path}/player_{stat}_{season}.csv")
 
+            # Don't start cooldown if there are no seasons left
             if batch_start == end_season:
                 break
 
