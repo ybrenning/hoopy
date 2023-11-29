@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+
+import datetime
 import os
 
 import pandas as pd
@@ -5,7 +8,9 @@ import plotly.express as px
 from dash import Dash, Input, Output, callback, dcc, html
 
 data_path = os.getcwd() + "/data"
-seasons = [year for year in range(1950, 2023 + 1)]
+current_year = int(datetime.date.today().strftime("%Y"))
+
+seasons = [year for year in range(1950, current_year + 1)]
 three_pt_seasons = seasons[seasons.index(1980):]
 
 app = Dash(__name__)
@@ -69,17 +74,38 @@ def plot_fg_percentages():
 
 
 # TODO: Implement this
-def mins_played_by_age():
-    raise NotImplementedError
-    dfs = []
+def plot_ages():
+    means = []
+    medians = []
     for season in seasons:
-        dfs.append(
-            pd.read_csv(
-                data_path + f"/player_totals_{season}.csv"
-            )[["Age", "MP"]]
-        )
+        df = pd.read_csv(f"{data_path}/player_totals_{season}.csv")
+        means.append(df["Age"].mean())
+        medians.append(df["Age"].median())
 
-    print(dfs[0])
+    df = pd.DataFrame({"season": seasons, "mean": means, "median": medians})
+
+    fig = px.line(
+        df,
+        x="season",
+        y=["mean", "median"],
+        template="seaborn"
+    )
+
+    fig.update_layout(
+        autosize=False,
+        width=1000,
+        height=750,
+        margin=dict(
+            l=100,
+            r=100,
+            b=100,
+            t=100,
+            pad=4,
+        ),
+        yaxis_range=[24, 29],
+    )
+
+    return fig
 
 
 app.layout = html.Div([
@@ -100,7 +126,11 @@ app.layout = html.Div([
 
     html.Div([
         dcc.Graph(figure=plot_fg_percentages(), id="plot-fg")
-    ], )
+    ]),
+
+    html.Div([
+        dcc.Graph(figure=plot_ages(), id="plot-ages")
+    ]),
 ])
 
 
