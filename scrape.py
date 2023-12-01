@@ -232,9 +232,13 @@ def scrape_leaders(response):
     dfs = []
     for i in range(0, len(available_leaders_stats)):
         df = pd.read_html(StringIO(str(table[i])))[0]
+
         df = df.drop(labels=[0], axis=1)
-        df[1] = df[1].apply(lambda x: x.split("•")[0].rstrip(" "))
         df.columns = ["Player", "Total"]
+        df["Player"] = df["Player"].apply(
+            lambda x: x.split("•")[0].rstrip(" ").replace("*", "")
+        )
+
         dfs.append(df)
 
     return dfs
@@ -285,6 +289,12 @@ def save_stat_tables(save_path, *stats, start_season=1950, end_season=None):
                 "Disclaimer: stats only available starting from",
                 cur_start_season
             )
+        elif stat == "leaders":
+            cur_start_season = 1974
+            print(
+                "Disclaimer: stats only available starting from",
+                cur_start_season
+            )
         else:
             cur_start_season = start_season
 
@@ -320,9 +330,11 @@ def save_stat_tables(save_path, *stats, start_season=1950, end_season=None):
             for i in tqdm(range(0, 60), desc="Request cooldown (60s)"):
                 time.sleep(1)
 
+    print("...Done")
+
 
 def parse_args():
-    stat_options = ", ".join([stat for stat in available_player_stats])
+    stat_options = ", ".join([stat for stat in available_stats])
 
     parser = argparse.ArgumentParser(description="Scrape NBA data")
     parser.add_argument(
@@ -358,6 +370,10 @@ def parse_args():
         if date_pattern.match(args.seasons[0]):
             start_season = int(args.seasons[0].split("-")[0])
             end_season = int(args.seasons[0].split("-")[1])
+        else:
+            raise ValueError(
+                "Invalid season format provided. Read help menu for more info"
+            )
 
         valid_seasons = range(1950, current_year + 1)
         if (
