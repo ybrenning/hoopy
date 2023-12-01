@@ -31,6 +31,23 @@ available_team_stats = [
     "standings"
 ]
 
+available_stats = available_player_stats + available_team_stats + ["leaders"]
+
+available_leaders_stats = [
+    "pts",
+    "ppg",
+    "r",
+    "rpg",
+    "or",
+    "dr",
+    "a",
+    "apg",
+    "s",
+    "spg",
+    "b",
+    "bpg"
+]
+
 single_index = [
     "totals",
     "per_game",
@@ -160,6 +177,8 @@ def scrape_standings(response):
 
         df_west = df_east.iloc[index_west+1:, :]
         df_east = df_east.iloc[index_east+1: index_west, :]
+    else:
+        df_central = None
 
     df_east.columns = df_east.columns.str.replace(
         "Eastern Conference", "Team"
@@ -202,6 +221,22 @@ def scrape_standings(response):
     )
 
 
+def scrape_leaders(response):
+    html = response.text
+    soup = BeautifulSoup(re.sub("<!--|-->", "", html), "html.parser")
+    table = soup.find_all("table")
+
+    dfs = []
+    for i in range(0, len(available_leaders_stats)):
+        df = pd.read_html(StringIO(str(table[i])))[0]
+        df = df.drop(labels=[0], axis=1)
+        df[1] = df[1].apply(lambda x: x.split("•")[0].rstrip(" "))
+        df.columns = ["Player", "Total"]
+        dfs.append(df)
+
+    return dfs
+
+
 def make_request(season_end, stat):
     if stat in single_index:
         scrape_table = scrape_players_single_index
@@ -209,6 +244,8 @@ def make_request(season_end, stat):
         scrape_table = scrape_players_multi_index
     elif stat in available_team_stats:
         scrape_table = scrape_standings
+    elif stat == "leaders":
+        scrape_table = scrape_leaders
     else:
         raise ValueError
 
@@ -266,6 +303,10 @@ def save_stat_tables(save_path, *stats, start_season=1950, end_season=None):
                         df_central.to_csv(
                             f"{save_path}/{stat}_central_{season}.csv"
                         )
+                elif stat == "leaders":
+                    dfs = df
+                    for lstat, df in zip(available_leaders_stats, dfs):
+                        df.to_csv(f"{save_path}/{lstat}_leaders_{season}.csv")
                 else:
                     df.to_csv(f"{save_path}/player_{stat}_{season}.csv")
 
@@ -299,7 +340,7 @@ def parse_args():
 
     args = parser.parse_args()
     for stat in args.stats:
-        if stat not in available_player_stats + available_team_stats:
+        if stat not in available_stats:
             raise ValueError(
                 f"'{stat}' is not a valid stat. Read help menu for more info"
             )
