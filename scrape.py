@@ -214,6 +214,9 @@ def scrape_standings(response):
 
         df_central = df_central.reset_index(drop=True)
 
+    df_east = df_east[~df_east["Team"].str.contains("Division")]
+    df_west = df_west[~df_west["Team"].str.contains("Division")]
+
     return (
         df_east.reset_index(drop=True),
         df_west.reset_index(drop=True),
