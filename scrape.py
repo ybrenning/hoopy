@@ -31,7 +31,16 @@ available_team_stats = [
     "standings"
 ]
 
-available_stats = available_player_stats + available_team_stats + ["leaders"]
+available_misc_stats = [
+    "leaders",
+    "mvps"
+]
+
+available_stats = [
+    *available_player_stats,
+    *available_team_stats,
+    *available_misc_stats
+]
 
 available_leaders_stats = [
     "pts",
@@ -244,7 +253,24 @@ def scrape_leaders(response):
     return dfs
 
 
+def scrape_mvps(response):
+    html = response.text
+    soup = BeautifulSoup(re.sub("<!--|-->", "", html), "html.parser")
+    table = soup.find("table")
+
+    df = pd.read_html(StringIO(str(table)))[0]
+    df = df.dropna(axis=1, how="all")
+    df.columns = df.columns.droplevel()
+    df = df.drop(labels=["Rank"], axis=1)
+
+    for sc in df.columns[3:]:
+        df[sc] = pd.to_numeric(df[sc], errors="coerce")
+
+    return df
+
+
 def make_request(season_end, stat):
+    url_appendix = f"leagues/NBA_{season_end}_{stat}.html"
     if stat in single_index:
         scrape_table = scrape_players_single_index
     elif stat in multi_index:
@@ -253,10 +279,13 @@ def make_request(season_end, stat):
         scrape_table = scrape_standings
     elif stat == "leaders":
         scrape_table = scrape_leaders
+    elif stat == "mvps":
+        url_appendix = f"awards/awards_{season_end}.html"
+        scrape_table = scrape_mvps
     else:
         raise ValueError
 
-    response = requests.get(URL + f"leagues/NBA_{season_end}_{stat}.html")
+    response = requests.get(URL + url_appendix)
 
     if response.status_code == 200:
         return scrape_table(response)
@@ -278,22 +307,22 @@ def save_stat_tables(save_path, *stats, start_season=1950, end_season=None):
         print(f"Loading {stat}")
 
         if stat in ["shooting", "play-by-play"]:
-            cur_start_season = 1997
+            cur_start_season = 1997 if start_season < 1997 else start_season
             print(
                 "Disclaimer: stats only available starting from",
-                cur_start_season
+                "1997"
             )
-        elif stat == "per_poss":
-            cur_start_season = 1974
+        elif stat in ["per_poss", "leaders"]:
+            cur_start_season = 1974 if start_season < 1974 else start_season
             print(
                 "Disclaimer: stats only available starting from",
-                cur_start_season
+                "1974"
             )
-        elif stat == "leaders":
-            cur_start_season = 1974
+        elif stat == "mvps":
+            cur_start_season = 1957 if start_season < 1957 else start_season
             print(
                 "Disclaimer: stats only available starting from",
-                cur_start_season
+                "1957"
             )
         else:
             cur_start_season = start_season
@@ -329,8 +358,6 @@ def save_stat_tables(save_path, *stats, start_season=1950, end_season=None):
 
             for i in tqdm(range(0, 60), desc="Request cooldown (60s)"):
                 time.sleep(1)
-
-    print("...Done")
 
 
 def parse_args():
