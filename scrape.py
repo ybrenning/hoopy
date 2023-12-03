@@ -338,22 +338,35 @@ def save_stat_tables(save_path, *stats, start_season=1950, end_season=None):
 
                 if stat == "standings":
                     df_east, df_west, df_central = df
-                    df_east.to_csv(f"{save_path}/{stat}_east_{season}.csv")
-                    df_west.to_csv(f"{save_path}/{stat}_west_{season}.csv")
+                    df_east.to_csv(
+                        f"{save_path}/{stat}_east_{season}.csv",
+                        index=False
+                    )
+                    df_west.to_csv(
+                        f"{save_path}/{stat}_west_{season}.csv",
+                        index=False
+                    )
 
                     if df_central is not None:
                         df_central.to_csv(
-                            f"{save_path}/{stat}_central_{season}.csv"
+                            f"{save_path}/{stat}_central_{season}.csv",
+                            index=False
                         )
                 elif stat == "leaders":
                     dfs = df
                     for lstat, df in zip(available_leaders_stats, dfs):
-                        df.to_csv(f"{save_path}/{lstat}_leaders_{season}.csv")
+                        df.to_csv(
+                            f"{save_path}/{lstat}_leaders_{season}.csv",
+                            index=False
+                        )
                 else:
-                    df.to_csv(f"{save_path}/player_{stat}_{season}.csv")
+                    df.to_csv(
+                        f"{save_path}/player_{stat}_{season}.csv",
+                        index=False
+                    )
 
             # Don't start cooldown if there are no seasons left
-            if batch_start == end_season:
+            if min(batch_start+batch_size, end_season+1) == end_season:
                 break
 
             for i in tqdm(range(0, 60), desc="Request cooldown (60s)"):
